@@ -54,31 +54,75 @@ func (n *NSQD) Main() {
 
 ```go
 type TCPHandler interface {
-	Handle(net.Conn)
+    Handle(net.Conn)
 }
 
 //监听到来的连接，用tcpServer.handler进行处理
 func TCPServer(listener net.Listener, handler TCPHandler, logf lg.AppLogFunc) {
-	logf(lg.INFO, "TCP: listening on %s", listener.Addr())
+    logf(lg.INFO, "TCP: listening on %s", listener.Addr())
 
-	for {
-		clientConn, err := listener.Accept()
-		if err != nil {
-			if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
-				logf(lg.WARN, "temporary Accept() failure - %s", err)
-				runtime.Gosched()
-				continue
-			}
-			// theres no direct way to detect this error because it is not exposed
-			if !strings.Contains(err.Error(), "use of closed network connection") {
-				logf(lg.ERROR, "listener.Accept() - %s", err)
-			}
-			break
-		}
-		go handler.Handle(clientConn)
+    for {
+        clientConn, err := listener.Accept()
+        if err != nil {
+            if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
+                logf(lg.WARN, "temporary Accept() failure - %s", err)
+                runtime.Gosched()
+                continue
+            }
+            // theres no direct way to detect this error because it is not exposed
+            if !strings.Contains(err.Error(), "use of closed network connection") {
+                logf(lg.ERROR, "listener.Accept() - %s", err)
+            }
+            break
+        }
+        go handler.Handle(clientConn)
+    }
+
+    logf(lg.INFO, "TCP: closing %s", listener.Addr())
+}
+```
+
+可以在nsq/nsqd/tcp.go看到nsq的tcpServer的具体实现
+
+```go
+type tcpServer struct {
+	ctx *context
+}
+
+func (p *tcpServer) Handle(clientConn net.Conn) {
+	p.ctx.nsqd.logf(LOG_INFO, "TCP: new client(%s)", clientConn.RemoteAddr())
+
+	// The client should initialize itself by sending a 4 byte sequence indicating
+	// the version of the protocol that it intends to communicate, this will allow us
+	// to gracefully upgrade the protocol away from text/line oriented to whatever...
+	buf := make([]byte, 4)
+	_, err := io.ReadFull(clientConn, buf)
+	if err != nil {
+		p.ctx.nsqd.logf(LOG_ERROR, "failed to read protocol version - %s", err)
+		return
 	}
+	protocolMagic := string(buf)
 
-	logf(lg.INFO, "TCP: closing %s", listener.Addr())
+	p.ctx.nsqd.logf(LOG_INFO, "CLIENT(%s): desired protocol magic '%s'",
+		clientConn.RemoteAddr(), protocolMagic)
+	//tcp时候的通信协议
+	var prot protocol.Protocol
+	switch protocolMagic {
+	case "  V2":
+		prot = &protocolV2{ctx: p.ctx}
+	default:
+		protocol.SendFramedResponse(clientConn, frameTypeError, []byte("E_BAD_PROTOCOL"))
+		clientConn.Close()
+		p.ctx.nsqd.logf(LOG_ERROR, "client(%s) bad protocol magic '%s'",
+			clientConn.RemoteAddr(), protocolMagic)
+		return
+	}
+	//通过prot的IO循环时间来处理每一个连接
+	err = prot.IOLoop(clientConn)
+	if err != nil {
+		p.ctx.nsqd.logf(LOG_ERROR, "client(%s) - %s", clientConn.RemoteAddr(), err)
+		return
+	}
 }
 ```
 
