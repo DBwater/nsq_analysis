@@ -19,31 +19,76 @@ svc框架启动，相当于c语言中的deamon进程，在后台一直运行，�
 
 ```go
 func Run(service Service, sig ...os.Signal) error {
-	env := environment{}
+    env := environment{}
 
-	//使用Init 初始化
-	if err := service.Init(env); err != nil {
-		return err
+    //使用Init 初始化
+    if err := service.Init(env); err != nil {
+        return err
+    }
+
+    //调用Start，使程序持久化运行、和下面的信号处理是并行的
+    if err := service.Start(); err != nil {
+        return err
+    }
+
+    //信号量处理
+    if len(sig) == 0 {
+        sig = []os.Signal{syscall.SIGINT, syscall.SIGTERM}
+    }
+
+    signalChan := make(chan os.Signal, 1)
+    signalNotify(signalChan, sig...)
+
+    //接收信号量会阻塞在这个地方，直到系统信号量到达
+    <-signalChan
+
+    // 当信号来到, 调用stop 方法优雅的结束程序
+    return service.Stop()
+}
+```
+
+nsq的init,start,stop三个函数
+
+```go
+func (p *program) Start() error {
+	opts := nsqd.NewOptions()
+	//首先用opts初始化一遍参数
+	flagSet := nsqdFlagSet(opts)
+	//解析命令行参数到定义的flag
+	flagSet.Parse(os.Args[1:])
+
+	rand.Seed(time.Now().UTC().UnixNano())
+
+	if flagSet.Lookup("version").Value.(flag.Getter).Get().(bool) {
+		fmt.Println(version.String("nsqd"))
+		os.Exit(0)
 	}
 
-	//调用Start，使程序持久化运行、和下面的信号处理是并行的
-	if err := service.Start(); err != nil {
-		return err
+	var cfg config
+	configFile := flagSet.Lookup("config").Value.String()
+	if configFile != "" {
+		_, err := toml.DecodeFile(configFile, &cfg)
+		if err != nil {
+			log.Fatalf("ERROR: failed to load config file %s - %s", configFile, err.Error())
+		}
 	}
+	cfg.Validate()
+	//合并配置项，优先级：命令行参数>配置文件>默认参数
+	options.Resolve(opts, flagSet, cfg)
+	nsqd := nsqd.New(opts)
 
-	//信号量处理
-	if len(sig) == 0 {
-		sig = []os.Signal{syscall.SIGINT, syscall.SIGTERM}
+	err := nsqd.LoadMetadata()
+	if err != nil {
+		log.Fatalf("ERROR: %s", err.Error())
 	}
+	err = nsqd.PersistMetadata()
+	if err != nil {
+		log.Fatalf("ERROR: failed to persist metadata - %s", err.Error())
+	}
+	nsqd.Main()
 
-	signalChan := make(chan os.Signal, 1)
-	signalNotify(signalChan, sig...)
-
-	//接收信号量会阻塞在这个地方，直到系统信号量到达
-	<-signalChan
-
-	// 当信号来到, 调用stop 方法优雅的结束程序
-	return service.Stop()
+	p.nsqd = nsqd
+	return nil
 }
 ```
 
