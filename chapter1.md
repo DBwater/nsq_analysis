@@ -104,5 +104,15 @@ func (p *program) Start() error {
 }
 ```
 
+```go
+//优雅的退出
+func (p *program) Stop() error {
+	if p.nsqd != nil {
+		p.nsqd.Exit()
+	}
+	return nil
+}
+```
+
 
 
