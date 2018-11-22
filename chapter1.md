@@ -50,6 +50,18 @@ func Run(service Service, sig ...os.Signal) error {
 nsq的init,start,stop三个函数
 
 ```go
+//初始化程序
+func (p *program) Init(env svc.Environment) error {
+	if env.IsWindowsService() {
+		dir := filepath.Dir(os.Args[0])
+		return os.Chdir(dir)
+	}
+	return nil
+}
+```
+
+```go
+//启动进程
 func (p *program) Start() error {
     opts := nsqd.NewOptions()
     //首先用opts初始化一遍参数
@@ -84,6 +96,7 @@ func (p *program) Start() error {
     if err != nil {
         log.Fatalf("ERROR: failed to persist metadata - %s", err.Error())
     }
+    /* 进入主函数 */
     nsqd.Main()
 
     p.nsqd = nsqd
