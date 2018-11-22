@@ -1,7 +1,5 @@
 NSQ启动
 
-
-
 nsq的启动文件在apps/nsqd/nsqd.go里面
 
 nsq使用了svc框架来启动一个service, Run 时, 分别调用prg 实现的 Init 和 Start 方法 启动’program’,然后监听 后两个参数的信号量, 当信号量到达, 调用 prg 实现的 Stop 方法来退出
@@ -78,7 +76,6 @@ func (p *program) Start() error {
     //合并配置项，优先级：命令行参数>配置文件>默认参数
     options.Resolve(opts, flagSet, cfg)
     nsqd := nsqd.New(opts)
-
     err := nsqd.LoadMetadata()
     if err != nil {
         log.Fatalf("ERROR: %s", err.Error())
