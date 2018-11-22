@@ -96,7 +96,7 @@ func (p *program) Start() error {
     if err != nil {
         log.Fatalf("ERROR: failed to persist metadata - %s", err.Error())
     }
-    /* 进入主函数（死循环） */
+    /* 进入主函数 */
     nsqd.Main()
 
     p.nsqd = nsqd
