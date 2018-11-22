@@ -1,6 +1,8 @@
 NSQ启动
 
-apps/nsqd/nsqd.go
+
+
+nsq的启动文件在apps/nsqd/nsqd.go里面
 
 nsq使用了svc框架来启动一个service, Run 时, 分别调用prg 实现的 Init 和 Start 方法 启动’program’,然后监听 后两个参数的信号量, 当信号量到达, 调用 prg 实现的 Stop 方法来退出
 
@@ -51,44 +53,44 @@ nsq的init,start,stop三个函数
 
 ```go
 func (p *program) Start() error {
-	opts := nsqd.NewOptions()
-	//首先用opts初始化一遍参数
-	flagSet := nsqdFlagSet(opts)
-	//解析命令行参数到定义的flag
-	flagSet.Parse(os.Args[1:])
+    opts := nsqd.NewOptions()
+    //首先用opts初始化一遍参数
+    flagSet := nsqdFlagSet(opts)
+    //解析命令行参数到定义的flag
+    flagSet.Parse(os.Args[1:])
 
-	rand.Seed(time.Now().UTC().UnixNano())
+    rand.Seed(time.Now().UTC().UnixNano())
 
-	if flagSet.Lookup("version").Value.(flag.Getter).Get().(bool) {
-		fmt.Println(version.String("nsqd"))
-		os.Exit(0)
-	}
+    if flagSet.Lookup("version").Value.(flag.Getter).Get().(bool) {
+        fmt.Println(version.String("nsqd"))
+        os.Exit(0)
+    }
 
-	var cfg config
-	configFile := flagSet.Lookup("config").Value.String()
-	if configFile != "" {
-		_, err := toml.DecodeFile(configFile, &cfg)
-		if err != nil {
-			log.Fatalf("ERROR: failed to load config file %s - %s", configFile, err.Error())
-		}
-	}
-	cfg.Validate()
-	//合并配置项，优先级：命令行参数>配置文件>默认参数
-	options.Resolve(opts, flagSet, cfg)
-	nsqd := nsqd.New(opts)
+    var cfg config
+    configFile := flagSet.Lookup("config").Value.String()
+    if configFile != "" {
+        _, err := toml.DecodeFile(configFile, &cfg)
+        if err != nil {
+            log.Fatalf("ERROR: failed to load config file %s - %s", configFile, err.Error())
+        }
+    }
+    cfg.Validate()
+    //合并配置项，优先级：命令行参数>配置文件>默认参数
+    options.Resolve(opts, flagSet, cfg)
+    nsqd := nsqd.New(opts)
 
-	err := nsqd.LoadMetadata()
-	if err != nil {
-		log.Fatalf("ERROR: %s", err.Error())
-	}
-	err = nsqd.PersistMetadata()
-	if err != nil {
-		log.Fatalf("ERROR: failed to persist metadata - %s", err.Error())
-	}
-	nsqd.Main()
+    err := nsqd.LoadMetadata()
+    if err != nil {
+        log.Fatalf("ERROR: %s", err.Error())
+    }
+    err = nsqd.PersistMetadata()
+    if err != nil {
+        log.Fatalf("ERROR: failed to persist metadata - %s", err.Error())
+    }
+    nsqd.Main()
 
-	p.nsqd = nsqd
-	return nil
+    p.nsqd = nsqd
+    return nil
 }
 ```
 
