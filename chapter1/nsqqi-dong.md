@@ -106,7 +106,7 @@ func (p *tcpServer) Handle(clientConn net.Conn) {
 
     p.ctx.nsqd.logf(LOG_INFO, "CLIENT(%s): desired protocol magic '%s'",
         clientConn.RemoteAddr(), protocolMagic)
-    //tcp时候的通信协议
+    //tcp时候的通信协议，支持nsq的扩展性目前支持v2协议
     var prot protocol.Protocol
     switch protocolMagic {
     case "  V2":
