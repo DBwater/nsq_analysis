@@ -86,43 +86,44 @@ func TCPServer(listener net.Listener, handler TCPHandler, logf lg.AppLogFunc) {
 
 ```go
 type tcpServer struct {
-	ctx *context
+    ctx *context
 }
 
 func (p *tcpServer) Handle(clientConn net.Conn) {
-	p.ctx.nsqd.logf(LOG_INFO, "TCP: new client(%s)", clientConn.RemoteAddr())
+    p.ctx.nsqd.logf(LOG_INFO, "TCP: new client(%s)", clientConn.RemoteAddr())
 
-	// The client should initialize itself by sending a 4 byte sequence indicating
-	// the version of the protocol that it intends to communicate, this will allow us
-	// to gracefully upgrade the protocol away from text/line oriented to whatever...
-	buf := make([]byte, 4)
-	_, err := io.ReadFull(clientConn, buf)
-	if err != nil {
-		p.ctx.nsqd.logf(LOG_ERROR, "failed to read protocol version - %s", err)
-		return
-	}
-	protocolMagic := string(buf)
+    // The client should initialize itself by sending a 4 byte sequence indicating
+    // the version of the protocol that it intends to communicate, this will allow us
+    // to gracefully upgrade the protocol away from text/line oriented to whatever...
+    //读取tcp流的前四个字节，用于选择是哪种协议
+    buf := make([]byte, 4)
+    _, err := io.ReadFull(clientConn, buf)
+    if err != nil {
+        p.ctx.nsqd.logf(LOG_ERROR, "failed to read protocol version - %s", err)
+        return
+    }
+    protocolMagic := string(buf)
 
-	p.ctx.nsqd.logf(LOG_INFO, "CLIENT(%s): desired protocol magic '%s'",
-		clientConn.RemoteAddr(), protocolMagic)
-	//tcp时候的通信协议
-	var prot protocol.Protocol
-	switch protocolMagic {
-	case "  V2":
-		prot = &protocolV2{ctx: p.ctx}
-	default:
-		protocol.SendFramedResponse(clientConn, frameTypeError, []byte("E_BAD_PROTOCOL"))
-		clientConn.Close()
-		p.ctx.nsqd.logf(LOG_ERROR, "client(%s) bad protocol magic '%s'",
-			clientConn.RemoteAddr(), protocolMagic)
-		return
-	}
-	//通过prot的IO循环时间来处理每一个连接
-	err = prot.IOLoop(clientConn)
-	if err != nil {
-		p.ctx.nsqd.logf(LOG_ERROR, "client(%s) - %s", clientConn.RemoteAddr(), err)
-		return
-	}
+    p.ctx.nsqd.logf(LOG_INFO, "CLIENT(%s): desired protocol magic '%s'",
+        clientConn.RemoteAddr(), protocolMagic)
+    //tcp时候的通信协议
+    var prot protocol.Protocol
+    switch protocolMagic {
+    case "  V2":
+        prot = &protocolV2{ctx: p.ctx}
+    default:
+        protocol.SendFramedResponse(clientConn, frameTypeError, []byte("E_BAD_PROTOCOL"))
+        clientConn.Close()
+        p.ctx.nsqd.logf(LOG_ERROR, "client(%s) bad protocol magic '%s'",
+            clientConn.RemoteAddr(), protocolMagic)
+        return
+    }
+    //通过prot的IO循环时间来处理每一个连接
+    err = prot.IOLoop(clientConn)
+    if err != nil {
+        p.ctx.nsqd.logf(LOG_ERROR, "client(%s) - %s", clientConn.RemoteAddr(), err)
+        return
+    }
 }
 ```
 
