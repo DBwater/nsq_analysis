@@ -112,6 +112,7 @@ func (p *tcpServer) Handle(clientConn net.Conn) {
     case "  V2":
         prot = &protocolV2{ctx: p.ctx}
     default:
+        // 其他协议则发送E_BAD_PROTOCOL并关闭连接并
         protocol.SendFramedResponse(clientConn, frameTypeError, []byte("E_BAD_PROTOCOL"))
         clientConn.Close()
         p.ctx.nsqd.logf(LOG_ERROR, "client(%s) bad protocol magic '%s'",
