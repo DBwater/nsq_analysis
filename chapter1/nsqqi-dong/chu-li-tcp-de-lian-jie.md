@@ -179,8 +179,8 @@ func (p *protocolV2) IOLoop(conn net.Conn) error {
 
 可以看到其实IOLoop函数主要进行有两个功能
 
-1.  p.messagePump（）对客户端订阅的消息进行获取，发送给客户端
-2.  p.Exec（） 对客户端发送的命令进行执行
+1. p.messagePump（）对客户端订阅的消息进行获取，发送给客户端
+2. p.Exec（） 对客户端发送的命令进行执行
 
 
 
