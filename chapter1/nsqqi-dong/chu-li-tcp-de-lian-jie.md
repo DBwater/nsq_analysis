@@ -82,100 +82,105 @@ tcpServe主要是通过判断哪种协议，然后根据协议来处理每一个
 
 ```go
 func (p *protocolV2) IOLoop(conn net.Conn) error {
-	var err error
-	var line []byte
-	var zeroTime time.Time
-	//原子操作防止多线程冲突,创建客户端的序列号
-	clientID := atomic.AddInt64(&p.ctx.nsqd.clientIDSequence, 1)
-	client := newClientV2(clientID, conn, p.ctx)
-	
-	//把需要投递给客户端的消息从chan里面抽取出来（处理订阅消息的发送）
+    var err error
+    var line []byte
+    var zeroTime time.Time
+    //原子操作防止多线程冲突,创建客户端的序列号
+    clientID := atomic.AddInt64(&p.ctx.nsqd.clientIDSequence, 1)
+    client := newClientV2(clientID, conn, p.ctx)
 
-	messagePumpStartedChan := make(chan bool)
-	go p.messagePump(client, messagePumpStartedChan)
-	<-messagePumpStartedChan
+    //把需要投递给客户端的消息从chan里面抽取出来（处理订阅消息的发送）
 
-	//处理客户端的请求
-	for {
-		//如果设置了心跳则读超时时间设置为心跳的两倍
-		//因为在一个心跳周期，肯定会有一个报文到达，read不会超时
-		//如果没有设置心跳，则不设置读超时
-		if client.HeartbeatInterval > 0 {
-			client.SetReadDeadline(time.Now().Add(client.HeartbeatInterval * 2))
-		} else {
-			client.SetReadDeadline(zeroTime)
-		}
-		//读取客户端消息，以\n符号分割
-		// ReadSlice does not allocate new space for the data each request
-		// ie. the returned slice is only valid until the next call to it
-		line, err = client.Reader.ReadSlice('\n')
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("failed to read command - %s", err)
-			}
-			break
+    messagePumpStartedChan := make(chan bool)
+    go p.messagePump(client, messagePumpStartedChan)
+    <-messagePumpStartedChan
 
-		}
-		//v2协议一行就是一个命令
-		line = line[:len(line)-1]
+    //处理客户端的请求
+    for {
+        //如果设置了心跳则读超时时间设置为心跳的两倍
+        //因为在一个心跳周期，肯定会有一个报文到达，read不会超时
+        //如果没有设置心跳，则不设置读超时
+        if client.HeartbeatInterval > 0 {
+            client.SetReadDeadline(time.Now().Add(client.HeartbeatInterval * 2))
+        } else {
+            client.SetReadDeadline(zeroTime)
+        }
+        //读取客户端消息，以\n符号分割
+        // ReadSlice does not allocate new space for the data each request
+        // ie. the returned slice is only valid until the next call to it
+        line, err = client.Reader.ReadSlice('\n')
+        if err != nil {
+            if err == io.EOF {
+                err = nil
+            } else {
+                err = fmt.Errorf("failed to read command - %s", err)
+            }
+            break
 
-		// windows版本的回车可能为\r\n，特殊处理一下
-		if len(line) > 0 && line[len(line)-1] == '\r' {
-			line = line[:len(line)-1]
-		}
+        }
+        //v2协议一行就是一个命令
+        line = line[:len(line)-1]
 
-		// 每个命令, 用 " "空格来划分 参数
-		params := bytes.Split(line, separatorBytes)
+        // windows版本的回车可能为\r\n，特殊处理一下
+        if len(line) > 0 && line[len(line)-1] == '\r' {
+            line = line[:len(line)-1]
+        }
 
-		p.ctx.nsqd.logf(LOG_DEBUG, "PROTOCOL(V2): [%s] %s", client, params)
+        // 每个命令, 用 " "空格来划分 参数
+        params := bytes.Split(line, separatorBytes)
 
-		var response []byte
-		//执行相应的命令
-		response, err = p.Exec(client, params)
-		//如果执行出错，则输出对应的log信息
-		if err != nil {
-			ctx := ""
-			if parentErr := err.(protocol.ChildErr).Parent(); parentErr != nil {
-				ctx = " - " + parentErr.Error()
-			}
-			p.ctx.nsqd.logf(LOG_ERROR, "[%s] - %s%s", client, err, ctx)
+        p.ctx.nsqd.logf(LOG_DEBUG, "PROTOCOL(V2): [%s] %s", client, params)
 
-			sendErr := p.Send(client, frameTypeError, []byte(err.Error()))
-			if sendErr != nil {
-				p.ctx.nsqd.logf(LOG_ERROR, "[%s] - %s%s", client, sendErr, ctx)
-				break
-			}
+        var response []byte
+        //执行相应的命令
+        response, err = p.Exec(client, params)
+        //如果执行出错，则输出对应的log信息
+        if err != nil {
+            ctx := ""
+            if parentErr := err.(protocol.ChildErr).Parent(); parentErr != nil {
+                ctx = " - " + parentErr.Error()
+            }
+            p.ctx.nsqd.logf(LOG_ERROR, "[%s] - %s%s", client, err, ctx)
 
-			// errors of type FatalClientErr should forceably close the connection
-			if _, ok := err.(*protocol.FatalClientErr); ok {
-				break
-			}
-			continue
-		}
+            sendErr := p.Send(client, frameTypeError, []byte(err.Error()))
+            if sendErr != nil {
+                p.ctx.nsqd.logf(LOG_ERROR, "[%s] - %s%s", client, sendErr, ctx)
+                break
+            }
 
-		// 如果命令有需要 '响应' 的, 则发送响应
-		if response != nil {
-			err = p.Send(client, frameTypeResponse, response)
-			if err != nil {
-				err = fmt.Errorf("failed to send response - %s", err)
-				break
-			}
-		}
-	}
+            // errors of type FatalClientErr should forceably close the connection
+            if _, ok := err.(*protocol.FatalClientErr); ok {
+                break
+            }
+            continue
+        }
 
-	p.ctx.nsqd.logf(LOG_INFO, "PROTOCOL(V2): [%s] exiting ioloop", client)
-	//正常关闭连接
-	conn.Close()
-	close(client.ExitChan)
-	if client.Channel != nil {
-		client.Channel.RemoveClient(client.ID)
-	}
+        // 如果命令有需要 '响应' 的, 则发送响应
+        if response != nil {
+            err = p.Send(client, frameTypeResponse, response)
+            if err != nil {
+                err = fmt.Errorf("failed to send response - %s", err)
+                break
+            }
+        }
+    }
 
-	return err
+    p.ctx.nsqd.logf(LOG_INFO, "PROTOCOL(V2): [%s] exiting ioloop", client)
+    //正常关闭连接
+    conn.Close()
+    close(client.ExitChan)
+    if client.Channel != nil {
+        client.Channel.RemoveClient(client.ID)
+    }
+
+    return err
 }
 ```
+
+可以看到其实IOLoop函数主要进行有两个功能
+
+1.  p.messagePump（）对客户端订阅的消息进行获取，发送给客户端
+2.  p.Exec（） 对客户端发送的命令进行执行
 
 
 
