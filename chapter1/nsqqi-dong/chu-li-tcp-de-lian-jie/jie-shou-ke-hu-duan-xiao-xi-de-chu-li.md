@@ -95,19 +95,46 @@ PUB 方法做一系列检查, 然后调用 topic.PutMessage\(msg\) 做具体的�
 ```go
 // PutMessage writes a Message to the queue
 func (t *Topic) PutMessage(m *Message) error {
-	//读写锁，防止冲突
-	t.RLock()
-	defer t.RUnlock()
-	if atomic.LoadInt32(&t.exitFlag) == 1 {
-		return errors.New("exiting")
+    //读写锁，防止冲突
+    t.RLock()
+    defer t.RUnlock()
+    if atomic.LoadInt32(&t.exitFlag) == 1 {
+        return errors.New("exiting")
+    }
+    //投递消息
+    err := t.put(m)
+    if err != nil {
+        return err
+    }
+    //投递消息计数
+    atomic.AddUint64(&t.messageCount, 1)
+    return nil
+}
+```
+
+t.put 把数据通过管道队里传输，如果队列已满则先保存到磁盘
+
+```go
+func (t *Topic) put(m *Message) error {
+	select {
+	//把消息写入chan队列
+	//如果队列已满则执行default
+	case t.memoryMsgChan <- m:
+	default:
+		//获取一个缓冲池
+		//把消息写如缓冲池备份，防止数据丢失（实际上是写入磁盘）
+		b := bufferPoolGet()
+		err := writeMessageToBackend(b, m, t.backend)
+		//把b用完后放回缓冲池
+		bufferPoolPut(b)
+		t.ctx.nsqd.SetHealth(err)
+		if err != nil {
+			t.ctx.nsqd.logf(LOG_ERROR,
+				"TOPIC(%s) ERROR: failed to write message to backend - %s",
+				t.name, err)
+			return err
+		}
 	}
-	//投递消息
-	err := t.put(m)
-	if err != nil {
-		return err
-	}
-	//投递消息计数
-	atomic.AddUint64(&t.messageCount, 1)
 	return nil
 }
 ```

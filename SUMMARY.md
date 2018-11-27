@@ -9,7 +9,7 @@
     * [处理http的连接请求](chapter1/nsqqi-dong/chu-li-http-de-lian-jie-qing-qiu.md)
 * [NSQ的client](nsq.md)
 * [NSQ的topic](nsqde-topic.md)
-* NSQ的channel
+* [NSQ的channel](nsqde-channel.md)
 * [NSQ的数据流转](nsqde-shu-ju-liu-zhuan.md)
 * NSQ的细节
 
