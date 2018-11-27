@@ -37,5 +37,7 @@ func (p *protocolV2) Exec(client *clientV2, params [][]byte) ([]byte, error) {
 }
 ```
 
+p.pub是客户端向nsq投递消息
+
 
 
