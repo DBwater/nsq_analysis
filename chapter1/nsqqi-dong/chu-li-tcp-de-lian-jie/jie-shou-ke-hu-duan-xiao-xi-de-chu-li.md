@@ -116,28 +116,30 @@ t.put 把数据通过管道队里传输，如果队列已满则先保存到磁�
 
 ```go
 func (t *Topic) put(m *Message) error {
-	select {
-	//把消息写入chan队列
-	//如果队列已满则执行default
-	case t.memoryMsgChan <- m:
-	default:
-		//获取一个缓冲池
-		//把消息写如缓冲池备份，防止数据丢失（实际上是写入磁盘）
-		b := bufferPoolGet()
-		err := writeMessageToBackend(b, m, t.backend)
-		//把b用完后放回缓冲池
-		bufferPoolPut(b)
-		t.ctx.nsqd.SetHealth(err)
-		if err != nil {
-			t.ctx.nsqd.logf(LOG_ERROR,
-				"TOPIC(%s) ERROR: failed to write message to backend - %s",
-				t.name, err)
-			return err
-		}
-	}
-	return nil
+    select {
+    //把消息写入chan队列
+    //如果队列已满则执行default
+    case t.memoryMsgChan <- m:
+    default:
+        //获取一个缓冲池
+        //把消息写如缓冲池备份，防止数据丢失（实际上是写入磁盘）
+        b := bufferPoolGet()
+        err := writeMessageToBackend(b, m, t.backend)
+        //把b用完后放回缓冲池
+        bufferPoolPut(b)
+        t.ctx.nsqd.SetHealth(err)
+        if err != nil {
+            t.ctx.nsqd.logf(LOG_ERROR,
+                "TOPIC(%s) ERROR: failed to write message to backend - %s",
+                t.name, err)
+            return err
+        }
+    }
+    return nil
 }
 ```
 
+在创建topic的时候就有一个线程在等待接收memoryMsgChan里面的消息，等待他的到来
 
+在/
 
