@@ -39,5 +39,56 @@ func (p *protocolV2) Exec(client *clientV2, params [][]byte) ([]byte, error) {
 
 p.pub是客户端向nsq投递消息
 
+```go
+func (p *protocolV2) PUB(client *clientV2, params [][]byte) ([]byte, error) {
+	var err error
+
+	if len(params) < 2 {
+		return nil, protocol.NewFatalClientErr(nil, "E_INVALID", "PUB insufficient number of parameters")
+	}
+	//请求格式: [ PUB topicName ...]
+	//判断是否是正确的topicName格式
+	topicName := string(params[1])
+	if !protocol.IsValidTopicName(topicName) {
+		return nil, protocol.NewFatalClientErr(nil, "E_BAD_TOPIC",
+			fmt.Sprintf("PUB topic name %q is not valid", topicName))
+	}
+	//读取消息内容
+	bodyLen, err := readLen(client.Reader, client.lenSlice)
+	if err != nil {
+		return nil, protocol.NewFatalClientErr(err, "E_BAD_MESSAGE", "PUB failed to read message body size")
+	}
+
+	if bodyLen <= 0 {
+		return nil, protocol.NewFatalClientErr(nil, "E_BAD_MESSAGE",
+			fmt.Sprintf("PUB invalid message body size %d", bodyLen))
+	}
+	//投递的消息不得大于设置的最大消息长度
+	if int64(bodyLen) > p.ctx.nsqd.getOpts().MaxMsgSize {
+		return nil, protocol.NewFatalClientErr(nil, "E_BAD_MESSAGE",
+			fmt.Sprintf("PUB message too big %d > %d", bodyLen, p.ctx.nsqd.getOpts().MaxMsgSize))
+	}
+
+	messageBody := make([]byte, bodyLen)
+	_, err = io.ReadFull(client.Reader, messageBody)
+	if err != nil {
+		return nil, protocol.NewFatalClientErr(err, "E_BAD_MESSAGE", "PUB failed to read message body")
+	}
+
+	if err := p.CheckAuth(client, "PUB", topicName, ""); err != nil {
+		return nil, err
+	}
+	//根据topicName获取topic，并投递消息
+	topic := p.ctx.nsqd.GetTopic(topicName)
+	msg := NewMessage(topic.GenerateID(), messageBody)
+	err = topic.PutMessage(msg)
+	if err != nil {
+		return nil, protocol.NewFatalClientErr(err, "E_PUB_FAILED", "PUB failed "+err.Error())
+	}
+
+	return okBytes, nil
+}
+```
+
 
 
