@@ -141,5 +141,53 @@ func (t *Topic) put(m *Message) error {
 
 在创建topic的时候就有一个线程在等待接收memoryMsgChan里面的消息，等待他的到来
 
-在/
+在nsq/nsqd/topic.go中：
+
+```go
+// 构造一个新的topic
+func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topic {
+	t := &Topic{
+		name:              topicName,
+		channelMap:        make(map[string]*Channel),
+		memoryMsgChan:     make(chan *Message, ctx.nsqd.getOpts().MemQueueSize),
+		startChan:         make(chan int, 1),
+		exitChan:          make(chan int),
+		channelUpdateChan: make(chan int),
+		ctx:               ctx,
+		paused:            0,
+		pauseChan:         make(chan int),
+		deleteCallback:    deleteCallback,
+		idFactory:         NewGUIDFactory(ctx.nsqd.getOpts().ID),
+	}
+	//临时的topic不需要进行磁盘保存
+	if strings.HasSuffix(topicName, "#ephemeral") {
+		t.ephemeral = true
+		t.backend = newDummyBackendQueue()
+	} else {
+		dqLogf := func(level diskqueue.LogLevel, f string, args ...interface{}) {
+			opts := ctx.nsqd.getOpts()
+			lg.Logf(opts.Logger, opts.logLevel, lg.LogLevel(level), f, args...)
+		}
+		//简历一个磁盘文件保存队列，如果消息队列满了或者nsq意外结束，把未投递的消息保存到磁盘中
+		t.backend = diskqueue.New(
+			topicName,
+			ctx.nsqd.getOpts().DataPath,
+			ctx.nsqd.getOpts().MaxBytesPerFile,
+			int32(minValidMsgLength),
+			int32(ctx.nsqd.getOpts().MaxMsgSize)+minValidMsgLength,
+			ctx.nsqd.getOpts().SyncEvery,
+			ctx.nsqd.getOpts().SyncTimeout,
+			dqLogf,
+		)
+	}
+	//这里会启动一个线程用来接收pub到topic的消息
+	t.waitGroup.Wrap(t.messagePump)
+
+	t.ctx.nsqd.Notify(t)
+
+	return t
+}
+```
+
+
 
