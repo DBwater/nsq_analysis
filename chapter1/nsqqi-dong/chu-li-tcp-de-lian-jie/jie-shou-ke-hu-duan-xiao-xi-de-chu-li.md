@@ -95,20 +95,56 @@ PUB 方法做一系列检查, 然后调用 topic.PutMessage\(msg\) 做具体的�
 ```go
 // PutMessage writes a Message to the queue
 func (t *Topic) PutMessage(m *Message) error {
-	//读写锁，防止冲突
-	t.RLock()
-	defer t.RUnlock()
-	if atomic.LoadInt32(&t.exitFlag) == 1 {
-		return errors.New("exiting")
+    //读写锁，防止冲突
+    t.RLock()
+    defer t.RUnlock()
+    if atomic.LoadInt32(&t.exitFlag) == 1 {
+        return errors.New("exiting")
+    }
+    //投递消息
+    err := t.put(m)
+    if err != nil {
+        return err
+    }
+    //投递消息计数
+    atomic.AddUint64(&t.messageCount, 1)
+    return nil
+}
+```
+
+t.put是把消息投递到队列中去，如果队列满了，那么就保存消息到磁盘
+
+```go
+func (t *Topic) put(m *Message) error {
+	select {
+	//把消息投递到队列中去
+	case t.memoryMsgChan <- m:
+	default:
+	//如果队列满了，那么需要一个结构来保存消息（保存到磁盘）
+		b := bufferPoolGet()
+		err := writeMessageToBackend(b, m, t.backend)
+		bufferPoolPut(b)
+		t.ctx.nsqd.SetHealth(err)
+		if err != nil {
+			t.ctx.nsqd.logf(LOG_ERROR,
+				"TOPIC(%s) ERROR: failed to write message to backend - %s",
+				t.name, err)
+			return err
+		}
 	}
-	//投递消息
-	err := t.put(m)
-	if err != nil {
-		return err
-	}
-	//投递消息计数
-	atomic.AddUint64(&t.messageCount, 1)
 	return nil
+}
+```
+
+t.put是投递消息到管道，那么就有一个地方会接受这个管道过来的消息，我们可以在新建toppic的时候看到一个函数
+
+```go
+func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topic {
+	t := &Topic{
+		...
+	}
+	...
+	t.waitGroup.Wrap(func() { t.messagePump() })
 }
 ```
 
