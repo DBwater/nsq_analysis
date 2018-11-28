@@ -153,106 +153,161 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 
 ```go
 func (t *Topic) messagePump() {
-	var msg *Message
-	var buf []byte
-	var err error
-	var chans []*Channel
-	var memoryMsgChan chan *Message
-	var backendChan chan []byte
+    var msg *Message
+    var buf []byte
+    var err error
+    var chans []*Channel
+    var memoryMsgChan chan *Message
+    var backendChan chan []byte
 
-	// do not pass messages before Start(), but avoid blocking Pause() or GetChannel()
-	for {
-		select {
-		case <-t.channelUpdateChan:
-			continue
-		case <-t.pauseChan:
-			continue
-		case <-t.exitChan:
-			goto exit
-		case <-t.startChan:
-		}
-		break
-	}
-	//获取topic对应的channel的状态
-	t.RLock()
-	for _, c := range t.channelMap {
-		chans = append(chans, c)
-	}
-	t.RUnlock()
-	if len(chans) > 0 && !t.IsPaused() {
-		memoryMsgChan = t.memoryMsgChan
-		backendChan = t.backend.ReadChan()
-	}
+    // do not pass messages before Start(), but avoid blocking Pause() or GetChannel()
+    for {
+        select {
+        case <-t.channelUpdateChan:
+            continue
+        case <-t.pauseChan:
+            continue
+        case <-t.exitChan:
+            goto exit
+        case <-t.startChan:
+        }
+        break
+    }
+    //获取topic对应的channel的状态
+    t.RLock()
+    for _, c := range t.channelMap {
+        chans = append(chans, c)
+    }
+    t.RUnlock()
+    if len(chans) > 0 && !t.IsPaused() {
+        memoryMsgChan = t.memoryMsgChan
+        backendChan = t.backend.ReadChan()
+    }
 
-	// main message loop
-	for {
-		select {
-		//接受投递到topic的消息
-		case msg = <-memoryMsgChan:
-		case buf = <-backendChan:
-			msg, err = decodeMessage(buf)
-			if err != nil {
-				t.ctx.nsqd.logf(LOG_ERROR, "failed to decode message - %s", err)
-				continue
-			}
-		case <-t.channelUpdateChan:
-			//Topic的channel发生变化，需要及时更新
-			chans = chans[:0]
-			t.RLock()
-			for _, c := range t.channelMap {
-				chans = append(chans, c)
-			}
-			t.RUnlock()
-			if len(chans) == 0 || t.IsPaused() {
-				memoryMsgChan = nil
-				backendChan = nil
-			} else {
-				memoryMsgChan = t.memoryMsgChan
-				backendChan = t.backend.ReadChan()
-			}
-			continue
-		case <-t.pauseChan:
-			//暂停
-			if len(chans) == 0 || t.IsPaused() {
-				memoryMsgChan = nil
-				backendChan = nil
-			} else {
-				memoryMsgChan = t.memoryMsgChan
-				backendChan = t.backend.ReadChan()
-			}
-			continue
-		case <-t.exitChan:
-			goto exit
-		}
-		//遍历topic所属的所有channel，把消息复制一份到所有的channel下
-		for i, channel := range chans {
-			chanMsg := msg
-			// copy the message because each channel
-			// needs a unique instance but...
-			// fastpath to avoid copy if its the first channel
-			// (the topic already created the first copy)
-			if i > 0 {
-				chanMsg = NewMessage(msg.ID, msg.Body)
-				chanMsg.Timestamp = msg.Timestamp
-				chanMsg.deferred = msg.deferred
-			}
-			if chanMsg.deferred != 0 {
-				channel.PutMessageDeferred(chanMsg, chanMsg.deferred)
-				continue
-			}
-			err := channel.PutMessage(chanMsg)
-			if err != nil {
-				t.ctx.nsqd.logf(LOG_ERROR,
-					"TOPIC(%s) ERROR: failed to put msg(%s) to channel(%s) - %s",
-					t.name, msg.ID, channel.name, err)
-			}
-		}
-	}
+    // main message loop
+    for {
+        select {
+        //接受投递到topic的消息
+        case msg = <-memoryMsgChan:
+        case buf = <-backendChan:
+            msg, err = decodeMessage(buf)
+            if err != nil {
+                t.ctx.nsqd.logf(LOG_ERROR, "failed to decode message - %s", err)
+                continue
+            }
+        case <-t.channelUpdateChan:
+            //Topic的channel发生变化，需要及时更新
+            chans = chans[:0]
+            t.RLock()
+            for _, c := range t.channelMap {
+                chans = append(chans, c)
+            }
+            t.RUnlock()
+            if len(chans) == 0 || t.IsPaused() {
+                memoryMsgChan = nil
+                backendChan = nil
+            } else {
+                memoryMsgChan = t.memoryMsgChan
+                backendChan = t.backend.ReadChan()
+            }
+            continue
+        case <-t.pauseChan:
+            //暂停
+            if len(chans) == 0 || t.IsPaused() {
+                memoryMsgChan = nil
+                backendChan = nil
+            } else {
+                memoryMsgChan = t.memoryMsgChan
+                backendChan = t.backend.ReadChan()
+            }
+            continue
+        case <-t.exitChan:
+            goto exit
+        }
+        //遍历topic所属的所有channel，把消息复制一份到所有的channel下
+        for i, channel := range chans {
+            chanMsg := msg
+            // copy the message because each channel
+            // needs a unique instance but...
+            // fastpath to avoid copy if its the first channel
+            // (the topic already created the first copy)
+            if i > 0 {
+                chanMsg = NewMessage(msg.ID, msg.Body)
+                chanMsg.Timestamp = msg.Timestamp
+                chanMsg.deferred = msg.deferred
+            }
+            if chanMsg.deferred != 0 {
+                channel.PutMessageDeferred(chanMsg, chanMsg.deferred)
+                continue
+            }
+            err := channel.PutMessage(chanMsg)
+            if err != nil {
+                t.ctx.nsqd.logf(LOG_ERROR,
+                    "TOPIC(%s) ERROR: failed to put msg(%s) to channel(%s) - %s",
+                    t.name, msg.ID, channel.name, err)
+            }
+        }
+    }
 
 exit:
-	t.ctx.nsqd.logf(LOG_INFO, "TOPIC(%s): closing ... messagePump", t.name)
+    t.ctx.nsqd.logf(LOG_INFO, "TOPIC(%s): closing ... messagePump", t.name)
 }
 ```
 
+channel.PutMessage\(\)和topic的操作类似，就是把消息通过管道发送给channel
 
+```go
+// PutMessage writes a Message to the queue
+func (c *Channel) PutMessage(m *Message) error {
+    c.RLock()
+    defer c.RUnlock()
+    if c.Exiting() {
+        return errors.New("exiting")
+    }
+    //投递消息
+    err := c.put(m)
+    if err != nil {
+        return err
+    }
+    atomic.AddUint64(&c.messageCount, 1)
+    return nil
+}
+```
+
+c.put也和topic的put类似
+
+```go
+func (c *Channel) put(m *Message) error {
+    select {
+    case c.memoryMsgChan <- m:
+    default:
+        b := bufferPoolGet()
+        err := writeMessageToBackend(b, m, c.backend)
+        bufferPoolPut(b)
+        c.ctx.nsqd.SetHealth(err)
+        if err != nil {
+            c.ctx.nsqd.logf(LOG_ERROR, "CHANNEL(%s): failed to write message to backend - %s",
+                c.name, err)
+            return err
+        }
+    }
+    return nil
+}
+```
+
+然后消息就会在
+
+```go
+func (p *protocolV2) IOLoop(conn net.Conn){
+messagePumpStartedChan := make(chan bool)
+...
+	go p.messagePump(client, messagePumpStartedChan)
+	<-messagePumpStartedChan
+
+...
+}
+
+```
+
+函数中被投递到客户端
 
