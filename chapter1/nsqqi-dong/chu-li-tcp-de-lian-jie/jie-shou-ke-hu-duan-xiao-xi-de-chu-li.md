@@ -295,19 +295,18 @@ func (c *Channel) put(m *Message) error {
 }
 ```
 
-然后消息就会在
+然后消息就会在nsq/nsqd/protocol\_v2.go的IOLoopP函数中被投递到客户端
 
 ```go
 func (p *protocolV2) IOLoop(conn net.Conn){
 messagePumpStartedChan := make(chan bool)
 ...
-	go p.messagePump(client, messagePumpStartedChan)
-	<-messagePumpStartedChan
+    go p.messagePump(client, messagePumpStartedChan)
+    <-messagePumpStartedChan
 
 ...
 }
-
 ```
 
-函数中被投递到客户端
+
 
