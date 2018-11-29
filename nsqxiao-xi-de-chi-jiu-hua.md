@@ -5,18 +5,18 @@
 ```
 func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topic {
 ...
-		//创建一个备份的结构体，用来持久化保存消息，防止消息的丢失
-		t.backend = diskqueue.New(
-			topicName,
-			ctx.nsqd.getOpts().DataPath,
-			ctx.nsqd.getOpts().MaxBytesPerFile,
-			int32(minValidMsgLength),
-			int32(ctx.nsqd.getOpts().MaxMsgSize)+minValidMsgLength,
-			ctx.nsqd.getOpts().SyncEvery,
-			ctx.nsqd.getOpts().SyncTimeout,
-			dqLogf,
-		)
-	}
+        //创建一个备份的结构体，用来持久化保存消息，防止消息的丢失
+        t.backend = diskqueue.New(
+            topicName,
+            ctx.nsqd.getOpts().DataPath,
+            ctx.nsqd.getOpts().MaxBytesPerFile,
+            int32(minValidMsgLength),
+            int32(ctx.nsqd.getOpts().MaxMsgSize)+minValidMsgLength,
+            ctx.nsqd.getOpts().SyncEvery,
+            ctx.nsqd.getOpts().SyncTimeout,
+            dqLogf,
+        )
+    }
 
 ...
 }
@@ -26,21 +26,30 @@ diskqueue在 github.com/nsqio/go-diskqueue/文件中
 
 在topic和channel中都有用到这个结构体来保存数据
 
-在/ndq/nsqd/topic中如果消息队列满了，那么就需要先把消息存储到t.backend中去
+在/nsq/nsqd/topic和nsq/nsqd/channel中如果消息队列满了，那么就需要先把消息存储到t.backend中去
 
 ```go
 func (t *Topic) put(m *Message) error{
 ...
 select {
-	//把消息投递到队列中去
-	case t.memoryMsgChan <- m:
- 	default:
-	//如果队列满了，那么需要一个结构来保存消息（保存到磁盘）
-	b := bufferPoolGet()
-	err := writeMessageToBackend(b, m, t.backend)
-	bufferPoolPut(b)
-	t.ctx.nsqd.SetHealth(err)
+    //把消息投递到队列中去
+    case t.memoryMsgChan <- m:
+    default:
+    //如果队列满了，那么需要一个结构来保存消息（保存到磁盘）
+    b := bufferPoolGet()
+    err := writeMessageToBackend(b, m, t.backend)
+    bufferPoolPut(b)
+    t.ctx.nsqd.SetHealth(err)
 }
+
+func (c *Channel) put(m *Message) error {
+select {
+    case c.memoryMsgChan <- m:
+    default:
+    b := bufferPoolGet()
+    err := writeMessageToBackend(b, m, c.backend)
+}
+
 
 ```
 
