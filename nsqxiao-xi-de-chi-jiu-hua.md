@@ -48,7 +48,6 @@ select {
     case c.memoryMsgChan <- m:
     default:
     //如果队列满了，那么需要一个结构来保存消息（保存到磁盘）
-
     b := bufferPoolGet()
     err := writeMessageToBackend(b, m, c.backend)
 ...
