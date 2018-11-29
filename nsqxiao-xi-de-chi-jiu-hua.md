@@ -43,14 +43,14 @@ select {
 }
 
 func (c *Channel) put(m *Message) error {
+...
 select {
     case c.memoryMsgChan <- m:
     default:
     b := bufferPoolGet()
     err := writeMessageToBackend(b, m, c.backend)
+...
 }
-
-
 ```
 
 
