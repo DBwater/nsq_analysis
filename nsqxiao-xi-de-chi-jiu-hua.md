@@ -26,7 +26,7 @@ diskqueue在 github.com/nsqio/go-diskqueue/文件中
 
 在topic和channel中都有用到这个结构体来保存数据
 
-在/nsq/nsqd/topic和nsq/nsqd/channel中如果消息队列满了，那么就需要先把消息存储到t.backend中去
+1. 在/nsq/nsqd/topic和nsq/nsqd/channel中如果消息队列满了，那么就需要先把消息存储到t.backend中去
 
 ```go
 func (t *Topic) put(m *Message) error{
@@ -54,5 +54,5 @@ select {
 }
 ```
 
-
+2. 在channel和topic退出之前，如果有消息，没有推送完毕，则也需要对消息进行一次保存
 
