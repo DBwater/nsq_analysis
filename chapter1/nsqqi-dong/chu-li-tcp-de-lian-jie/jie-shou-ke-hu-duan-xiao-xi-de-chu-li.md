@@ -112,17 +112,20 @@ func (t *Topic) PutMessage(m *Message) error {
 }
 ```
 
-t.put是把消息投递到队列中去，如果队列满了，那么就保存消息到磁盘
+t.put 把数据通过管道队里传输，如果队列已满则先保存到磁盘
 
 ```go
 func (t *Topic) put(m *Message) error {
     select {
-    //把消息投递到队列中去
+    //把消息写入chan队列
+    //如果队列已满则执行default
     case t.memoryMsgChan <- m:
     default:
-    //如果队列满了，那么需要一个结构来保存消息（保存到磁盘）
+        //获取一个缓冲池
+        //把消息写如缓冲池备份，防止数据丢失（实际上是写入磁盘）
         b := bufferPoolGet()
         err := writeMessageToBackend(b, m, t.backend)
+        //把b用完后放回缓冲池
         bufferPoolPut(b)
         t.ctx.nsqd.SetHealth(err)
         if err != nil {
