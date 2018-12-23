@@ -54,55 +54,70 @@ select {
 }
 ```
 
-2.  在channel和topic退出之前，如果有消息，没有推送完毕，则也需要对消息进行一次保存，当topic和channel退出之前会调用flush\(\)函数，把数据全部刷到磁盘中保存起来，防止消息的丢失
+1. 在channel和topic退出之前，如果有消息，没有推送完毕，则也需要对消息进行一次保存，当topic和channel退出之前会调用flush\(\)函数，把数据全部刷到磁盘中保存起来，防止消息的丢失
 
 ```go
 func (c *Channel) flush() error {
-	var msgBuf bytes.Buffer
+    var msgBuf bytes.Buffer
 
-	if len(c.memoryMsgChan) > 0 || len(c.inFlightMessages) > 0 || len(c.deferredMessages) > 0 {
-		c.ctx.nsqd.logf(LOG_INFO, "CHANNEL(%s): flushing %d memory %d in-flight %d deferred messages to backend",
-			c.name, len(c.memoryMsgChan), len(c.inFlightMessages), len(c.deferredMessages))
-	}
+    if len(c.memoryMsgChan) > 0 || len(c.inFlightMessages) > 0 || len(c.deferredMessages) > 0 {
+        c.ctx.nsqd.logf(LOG_INFO, "CHANNEL(%s): flushing %d memory %d in-flight %d deferred messages to backend",
+            c.name, len(c.memoryMsgChan), len(c.inFlightMessages), len(c.deferredMessages))
+    }
 
-	for {
-		select {
-		case msg := <-c.memoryMsgChan:
-		//如果消息队列中还有数据没有发送，则保存到磁盘
-			err := writeMessageToBackend(&msgBuf, msg, c.backend)
-			if err != nil {
-				c.ctx.nsqd.logf(LOG_ERROR, "failed to write message to backend - %s", err)
-			}
-		default:
-			goto finish
-		}
-	}
+    for {
+        select {
+        case msg := <-c.memoryMsgChan:
+        //如果消息队列中还有数据没有发送，则保存到磁盘
+            err := writeMessageToBackend(&msgBuf, msg, c.backend)
+            if err != nil {
+                c.ctx.nsqd.logf(LOG_ERROR, "failed to write message to backend - %s", err)
+            }
+        default:
+            goto finish
+        }
+    }
 
 finish:
-	c.inFlightMutex.Lock()
-	for _, msg := range c.inFlightMessages {
-	//如果有正在投递的消息（已发送，但没有得到响应）。也保存到磁盘
-		err := writeMessageToBackend(&msgBuf, msg, c.backend)
-		if err != nil {
-			c.ctx.nsqd.logf(LOG_ERROR, "failed to write message to backend - %s", err)
-		}
-	}
-	c.inFlightMutex.Unlock()
+    c.inFlightMutex.Lock()
+    for _, msg := range c.inFlightMessages {
+    //如果有正在投递的消息（已发送，但没有得到响应）。也保存到磁盘
+        err := writeMessageToBackend(&msgBuf, msg, c.backend)
+        if err != nil {
+            c.ctx.nsqd.logf(LOG_ERROR, "failed to write message to backend - %s", err)
+        }
+    }
+    c.inFlightMutex.Unlock()
 
-	c.deferredMutex.Lock()
-	for _, item := range c.deferredMessages {
-		msg := item.Value.(*Message)
-		//延迟投递的消息，目前还未投递，也保存到磁盘
-		err := writeMessageToBackend(&msgBuf, msg, c.backend)
-		if err != nil {
-			c.ctx.nsqd.logf(LOG_ERROR, "failed to write message to backend - %s", err)
-		}
-	}
-	c.deferredMutex.Unlock()
+    c.deferredMutex.Lock()
+    for _, item := range c.deferredMessages {
+        msg := item.Value.(*Message)
+        //延迟投递的消息，目前还未投递，也保存到磁盘
+        err := writeMessageToBackend(&msgBuf, msg, c.backend)
+        if err != nil {
+            c.ctx.nsqd.logf(LOG_ERROR, "failed to write message to backend - %s", err)
+        }
+    }
+    c.deferredMutex.Unlock()
 
-	return nil
+    return nil
 }
 ```
+
+writeMessageToBackend\(\)函数在/nsqd/message.go文件里面,首先会把消息写入到buffer缓冲区中，然后放到BackendQueue中持久化保存
+
+```go
+func writeMessageToBackend(buf *bytes.Buffer, msg *Message, bq BackendQueue) error {
+	buf.Reset()
+	_, err := msg.WriteTo(buf)
+	if err != nil {
+		return err
+	}
+	return bq.Put(buf.Bytes())
+}
+```
+
+msg实现了接口WeiterTo\(\)
 
 
 
