@@ -1,4 +1,4 @@
-NSQ的启动在nsq/nsqd/nsqd.go
+NSQ的启动的主函数在nsq/nsqd/nsqd.go
 
 ```go
 func (n *NSQD) Main() {
@@ -49,8 +49,6 @@ func (n *NSQD) Main() {
     }
 }
 ```
-
-
 
 
 
