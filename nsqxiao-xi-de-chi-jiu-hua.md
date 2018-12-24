@@ -126,7 +126,7 @@ func (n *NSQD) PersistMetadata() error {
 }
 ```
 
-topic.Close\(\)会进行数据文件的保存。
+topic.Close\(\)在topic结束的时候会进行数据文件的保存。
 
 在创建topic的时候就已经考虑到了数据文件持久化的问题，topic和channel的数据保存是通过一个diskqueue的结构体来保存的。
 
