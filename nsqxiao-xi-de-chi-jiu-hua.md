@@ -34,7 +34,8 @@ func (n *NSQD) Exit() {
 }
 ```
 
-其中PersistMetadata\(\)函数就是把nsq的相关信息写入到磁盘中，而topic.Close\(\)的时候也会进行一个flush，把topic中的数据刷新到磁盘中去，只不过是用的另外一种数据结构保存的。
+1. PersistMetadata\(\)函数就是把nsq的相关信息格式化为json写入到磁盘中，主要是topics和channels的名字和状态。
+2. topic.Close\(\)的时候也会进行一个flush，把topic中的数据刷新到磁盘中去，只不过是用的另外一种数据结构保存的。
 
 ```go
 func (n *NSQD) PersistMetadata() error {
@@ -83,7 +84,7 @@ func (n *NSQD) PersistMetadata() error {
     }
 
     tmpFileName := fmt.Sprintf("%s.%d.tmp", fileName, rand.Int())
-    //将格式化后的json字符串写入到文件中
+    //将格式化后的json字符串写入到文件中，并重命名文件
     err = writeSyncFile(tmpFileName, data)
     if err != nil {
         return err
