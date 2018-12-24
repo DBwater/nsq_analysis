@@ -46,7 +46,7 @@ func (n *NSQD) PersistMetadata() error {
     fileNameID := oldMetadataFile(n.getOpts())
 
     n.logf(LOG_INFO, "NSQ: persisting topic/channel metadata to %s", fileName)
-    //循环遍历得到所有topics和channels的名称和状态
+    //循环遍历得到所有topics和channels的名称和状态，并格式化为json字符串
     js := make(map[string]interface{})
     topics := []interface{}{}
     for _, topic := range n.topicMap {
@@ -83,7 +83,7 @@ func (n *NSQD) PersistMetadata() error {
     }
 
     tmpFileName := fmt.Sprintf("%s.%d.tmp", fileName, rand.Int())
-
+    //将格式化后的json字符串写入到文件中
     err = writeSyncFile(tmpFileName, data)
     if err != nil {
         return err
