@@ -38,93 +38,92 @@ func (n *NSQD) Exit() {
 
 ```go
 func (n *NSQD) PersistMetadata() error {
-	// persist metadata about what topics/channels we have, across restarts
-	//保存topics和channels原数据，防止程序结束或者重启时导致的数据丢失
-	fileName := newMetadataFile(n.getOpts())
-	// old metadata filename with ID, maintained in parallel to enable roll-back
-	fileNameID := oldMetadataFile(n.getOpts())
+    // persist metadata about what topics/channels we have, across restarts
+    //保存topics和channels原数据，防止程序结束或者重启时导致的数据丢失
+    fileName := newMetadataFile(n.getOpts())
+    // old metadata filename with ID, maintained in parallel to enable roll-back
+    //fileNameID文件是fileName文件的软连接，内容和fileName一样，用于回滚操作
+    fileNameID := oldMetadataFile(n.getOpts())
 
-	n.logf(LOG_INFO, "NSQ: persisting topic/channel metadata to %s", fileName)
+    n.logf(LOG_INFO, "NSQ: persisting topic/channel metadata to %s", fileName)
 
-	js := make(map[string]interface{})
-	topics := []interface{}{}
-	for _, topic := range n.topicMap {
-		if topic.ephemeral {
-			continue
-		}
-		topicData := make(map[string]interface{})
-		topicData["name"] = topic.name
-		topicData["paused"] = topic.IsPaused()
-		channels := []interface{}{}
-		topic.Lock()
-		for _, channel := range topic.channelMap {
-			channel.Lock()
-			if channel.ephemeral {
-				channel.Unlock()
-				continue
-			}
-			channelData := make(map[string]interface{})
-			channelData["name"] = channel.name
-			channelData["paused"] = channel.IsPaused()
-			channels = append(channels, channelData)
-			channel.Unlock()
-		}
-		topic.Unlock()
-		topicData["channels"] = channels
-		topics = append(topics, topicData)
-	}
-	js["version"] = version.Binary
-	js["topics"] = topics
+    js := make(map[string]interface{})
+    topics := []interface{}{}
+    for _, topic := range n.topicMap {
+        if topic.ephemeral {
+            continue
+        }
+        topicData := make(map[string]interface{})
+        topicData["name"] = topic.name
+        topicData["paused"] = topic.IsPaused()
+        channels := []interface{}{}
+        topic.Lock()
+        for _, channel := range topic.channelMap {
+            channel.Lock()
+            if channel.ephemeral {
+                channel.Unlock()
+                continue
+            }
+            channelData := make(map[string]interface{})
+            channelData["name"] = channel.name
+            channelData["paused"] = channel.IsPaused()
+            channels = append(channels, channelData)
+            channel.Unlock()
+        }
+        topic.Unlock()
+        topicData["channels"] = channels
+        topics = append(topics, topicData)
+    }
+    js["version"] = version.Binary
+    js["topics"] = topics
 
-	data, err := json.Marshal(&js)
-	if err != nil {
-		return err
-	}
+    data, err := json.Marshal(&js)
+    if err != nil {
+        return err
+    }
 
-	tmpFileName := fmt.Sprintf("%s.%d.tmp", fileName, rand.Int())
+    tmpFileName := fmt.Sprintf("%s.%d.tmp", fileName, rand.Int())
 
-	err = writeSyncFile(tmpFileName, data)
-	if err != nil {
-		return err
-	}
-	err = os.Rename(tmpFileName, fileName)
-	if err != nil {
-		return err
-	}
-	// technically should fsync DataPath here
+    err = writeSyncFile(tmpFileName, data)
+    if err != nil {
+        return err
+    }
+    err = os.Rename(tmpFileName, fileName)
+    if err != nil {
+        return err
+    }
+    // technically should fsync DataPath here
 
-	stat, err := os.Lstat(fileNameID)
-	if err == nil && stat.Mode()&os.ModeSymlink != 0 {
-		return nil
-	}
+    stat, err := os.Lstat(fileNameID)
+    if err == nil && stat.Mode()&os.ModeSymlink != 0 {
+        return nil
+    }
 
-	// if no symlink (yet), race condition:
-	// crash right here may cause next startup to see metadata conflict and abort
+    // if no symlink (yet), race condition:
+    // crash right here may cause next startup to see metadata conflict and abort
 
-	tmpFileNameID := fmt.Sprintf("%s.%d.tmp", fileNameID, rand.Int())
+    tmpFileNameID := fmt.Sprintf("%s.%d.tmp", fileNameID, rand.Int())
 
-	if runtime.GOOS != "windows" {
-		err = os.Symlink(fileName, tmpFileNameID)
-	} else {
-		// on Windows need Administrator privs to Symlink
-		// instead write copy every time
-		err = writeSyncFile(tmpFileNameID, data)
-	}
-	if err != nil {
-		return err
-	}
+    if runtime.GOOS != "windows" {
+        err = os.Symlink(fileName, tmpFileNameID)
+    } else {
+        // on Windows need Administrator privs to Symlink
+        // instead write copy every time
+        err = writeSyncFile(tmpFileNameID, data)
+    }
+    if err != nil {
+        return err
+    }
 
-	err = os.Rename(tmpFileNameID, fileNameID)
-	if err != nil {
-		return err
-	}
-	// technically should fsync DataPath here
+    err = os.Rename(tmpFileNameID, fileNameID)
+    if err != nil {
+        return err
+    }
+    // technically should fsync DataPath here
 
-	return nil
+    return nil
 }
 ```
-
-
 
 在创建topic的时候就已经考虑到了这个问题
 
