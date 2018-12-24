@@ -46,7 +46,7 @@ func (n *NSQD) PersistMetadata() error {
     fileNameID := oldMetadataFile(n.getOpts())
 
     n.logf(LOG_INFO, "NSQ: persisting topic/channel metadata to %s", fileName)
-
+    //循环遍历得到所有topics和channels的名称和状态
     js := make(map[string]interface{})
     topics := []interface{}{}
     for _, topic := range n.topicMap {
