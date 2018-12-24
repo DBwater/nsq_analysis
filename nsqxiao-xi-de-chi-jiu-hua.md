@@ -1,6 +1,29 @@
 既然是消息对列，那么我们需要考虑这样一个问题，如果nsq在某一段时间退出了，或者消息队列满了，那么消息是否就丢失了呢，显示是不太现实的，既然是消息队列，那么我就必须保证消息的可靠性
 
+nsq里面有一个结构体保存着nsq所有的topic和channel的相关信息：
+
+```go
+type meta struct {
+	Topics []struct {
+		Name     string `json:"name"`		//topic名字
+		Paused   bool   `json:"paused"`	//topic状态
+		Channels []struct {
+			Name   string `json:"name"`	//channel名字
+			Paused bool   `json:"paused"`	//channel状态
+		} `json:"channels"`
+	} `json:"topics"`
+}
+```
+
+
+
+
+
+
+
 在创建topic的时候就已经考虑到了这个问题
+
+
 
 ```
 func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topic {
@@ -118,6 +141,4 @@ func writeMessageToBackend(buf *bytes.Buffer, msg *Message, bq BackendQueue) err
 ```
 
 msg实现了接口WeiterTo\(\),把消息写入buffer缓冲区，然后用BackendQueue保存下来
-
-
 
