@@ -126,7 +126,7 @@ func (n *NSQD) PersistMetadata() error {
 }
 ```
 
-topic.Close\(\)在创建topic的时候就已经考虑到了这个问题
+topic.Close\(\)在创建topic的时候就已经考虑到了数据文件持久化的问题
 
 ```
 func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topic {
