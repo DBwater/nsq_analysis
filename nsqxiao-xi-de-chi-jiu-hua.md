@@ -126,7 +126,7 @@ func (n *NSQD) PersistMetadata() error {
 }
 ```
 
-在创建topic的时候就已经考虑到了这个问题
+topic.Close\(\)在创建topic的时候就已经考虑到了这个问题
 
 ```
 func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topic {
