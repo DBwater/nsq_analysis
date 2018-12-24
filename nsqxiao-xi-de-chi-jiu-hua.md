@@ -4,26 +4,18 @@ nsq里面有一个结构体保存着nsq所有的topic和channel的相关信息�
 
 ```go
 type meta struct {
-	Topics []struct {
-		Name     string `json:"name"`		//topic名字
-		Paused   bool   `json:"paused"`	//topic状态
-		Channels []struct {
-			Name   string `json:"name"`	//channel名字
-			Paused bool   `json:"paused"`	//channel状态
-		} `json:"channels"`
-	} `json:"topics"`
+    Topics []struct {
+        Name     string `json:"name"`        //topic名字
+        Paused   bool   `json:"paused"`        //topic状态
+        Channels []struct {
+            Name   string `json:"name"`    //channel名字
+            Paused bool   `json:"paused"`    //channel状态
+        } `json:"channels"`
+    } `json:"topics"`
 }
 ```
 
-
-
-
-
-
-
 在创建topic的时候就已经考虑到了这个问题
-
-
 
 ```
 func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topic {
