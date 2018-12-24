@@ -15,6 +15,32 @@ type meta struct {
 }
 ```
 
+当nsq退出的时候会把相关的数据写入到磁盘中
+
+```go
+func (n *NSQD) Exit() {
+    ...
+    n.Lock()
+    err := n.PersistMetadata()
+    if err != nil {
+        n.logf("ERROR: failed to persist metadata - %s", err)
+    }
+    n.logf("NSQ: closing topics")
+    for _, topic := range n.topicMap {
+        topic.Close()
+    }
+    n.Unlock()
+    ...
+}
+--------------------- 
+作者：shanhuhai5739 
+来源：CSDN 
+原文：https://blog.csdn.net/shanhuhai5739/article/details/73277761 
+版权声明：本文为博主原创文章，转载请附上博文链接！
+```
+
+
+
 在创建topic的时候就已经考虑到了这个问题
 
 ```
