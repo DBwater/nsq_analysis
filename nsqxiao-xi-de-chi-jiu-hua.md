@@ -108,16 +108,16 @@ writeMessageToBackend\(\)函数在/nsqd/message.go文件里面,首先会把消�
 
 ```go
 func writeMessageToBackend(buf *bytes.Buffer, msg *Message, bq BackendQueue) error {
-	buf.Reset()
-	_, err := msg.WriteTo(buf)
-	if err != nil {
-		return err
-	}
-	return bq.Put(buf.Bytes())
+    buf.Reset()
+    _, err := msg.WriteTo(buf)
+    if err != nil {
+        return err
+    }
+    return bq.Put(buf.Bytes())
 }
 ```
 
-msg实现了接口WeiterTo\(\)
+msg实现了接口WeiterTo\(\),把消息写入buffer缓冲区，然后用BackendQueue保存下来
 
 
 
